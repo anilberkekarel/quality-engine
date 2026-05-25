@@ -11,6 +11,7 @@ class CompanyFinancials:
     revenue: list[float]
     cogs: list[float]
     operating_income: list[float]
+    ebit: list[float]
     pretax_income: list[float]
     tax_provision: list[float]
     rnd_expense: list[float]
