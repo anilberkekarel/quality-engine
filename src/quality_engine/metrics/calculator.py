@@ -153,3 +153,19 @@ def reinvestment_rate(cf: CompanyFinancials) -> list[float]:
     reinvestment = numerator / nopat_valid
     reinvestment = reinvestment.replace([np.inf, -np.inf], np.nan)
     return reinvestment.tolist()
+
+
+def rnd_to_revenue(cf: CompanyFinancials) -> list[float]:
+    """Ar-Ge yoğunluğu: rnd_expense / revenue, her dönem için.
+
+    R&D raporlamayan sektörlerde (banka, enerji) rnd_expense NaN gelir ve
+    sonuç NaN döner — bu DOĞRU davranış (imputation yok); sektör-koşullu
+    kullanım Aşama 2'de ele alınır. revenue NaN ise o dönem NaN; revenue == 0
+    ise NaN.
+    """
+    revenue = pd.Series(cf.revenue, dtype="float64")
+    rnd_expense = pd.Series(cf.rnd_expense, dtype="float64")
+    revenue_nonzero = revenue.replace(0, np.nan)
+    ratio = rnd_expense / revenue_nonzero
+    ratio = ratio.replace([np.inf, -np.inf], np.nan)
+    return ratio.tolist()
