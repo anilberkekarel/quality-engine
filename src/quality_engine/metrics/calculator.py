@@ -122,3 +122,34 @@ def roic(cf: CompanyFinancials) -> list[float]:
     roic = nopat / ic
     roic = roic.replace([np.inf, -np.inf], np.nan)
     return roic.tolist()
+
+
+def reinvestment_rate(cf: CompanyFinancials) -> list[float]:
+    """Reinvestment rate = (net capex + ΔWC) / NOPAT, her dönem için (Damodaran).
+
+    net_capex = capex - depreciation. capex provider tarafından POZİTİFE
+    normalize edilmiş, depreciation (yfinance) POZİTİF; dolayısıyla net_capex
+    NEGATİF olabilir — bu GEÇERLİ (asset-light şirket amortismandan az yatırım
+    yapar). ΔWC kendi işaretiyle girer (abs alınmaz; işaret bilgi taşır).
+    Sonuç da NEGATİF olabilir — bu da GEÇERLİ (sermaye serbest bırakma).
+
+    NaN davranışı: NOPAT <= 0 ise payda anlamsız → o dönem NaN. Herhangi bir
+    bileşen (capex, depreciation, ΔWC, NOPAT) NaN ise sonuç NaN (propagate).
+
+    Not: Tek-yıl değeri ΔWC oynaklığı yüzünden gürültülüdür; asıl sinyal
+    çok-yıllık trend/istikrardadır (Aşama 2).
+    """
+    capex = pd.Series(cf.capex, dtype="float64")
+    depreciation = pd.Series(cf.depreciation, dtype="float64")
+    change_in_working_capital = pd.Series(cf.change_in_working_capital, dtype="float64")
+
+    nopat = _nopat(cf)
+
+    net_capex = capex - depreciation
+    numerator = net_capex + change_in_working_capital
+    # NOPAT <= 0 olan dönemleri NaN yap (payda anlamsız):
+    nopat_valid = nopat.where(nopat > 0, np.nan)
+
+    reinvestment = numerator / nopat_valid
+    reinvestment = reinvestment.replace([np.inf, -np.inf], np.nan)
+    return reinvestment.tolist()
