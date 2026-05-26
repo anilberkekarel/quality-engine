@@ -71,6 +71,12 @@ class YFinanceProvider(DataProvider):
         balance_values = {k: _extract(balance, v, date_index) for k, v in BALANCE_MAP.items()}
         cashflow_values = {k: _extract(cashflow, v, date_index) for k, v in CASHFLOW_MAP.items()}
 
+        # Provider, aynı gerçek-dünya büyüklüğünün kaynaklar arası farklı
+        # kodlanmasını standartlaştırabilir (capex işareti: yfinance negatif,
+        # motor pozitif bekler), ama veriyi değiştiremez/türetemez/dolduramaz.
+        # capex'i pozitif harcama miktarı standardına çek; NaN'ler NaN kalır.
+        cashflow_values["capex"] = [abs(v) for v in cashflow_values["capex"]]
+
         return CompanyFinancials(
             ticker=ticker,
             period_end_dates=list(date_index),
