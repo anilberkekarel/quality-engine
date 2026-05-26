@@ -1,0 +1,3 @@
+[tool.pytest.ini_options]
+# src-layout: paketi kurmadan import edilebilir kıl (python -m pytest yeter).
+pythonpath = ["src"]
