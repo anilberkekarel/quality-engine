@@ -9,6 +9,9 @@ import pandas as pd
 
 from ..data.base import CompanyFinancials
 
+MIN_TAX_RATE = 0.0
+MAX_TAX_RATE = 0.30
+
 
 def gross_margin(cf: CompanyFinancials) -> list[float]:
     """Brüt marj: (revenue - cogs) / revenue, her dönem için.
@@ -65,3 +68,57 @@ def revenue_growth(cf: CompanyFinancials) -> list[float]:
     growth = revenue.pct_change(fill_method=None)
     growth = growth.replace([np.inf, -np.inf], np.nan)
     return growth.tolist()
+
+
+def _tax_rate(cf: CompanyFinancials) -> pd.Series:
+    """Clamp'li efektif vergi oranı. pretax<=0 -> NaN.
+    [MIN_TAX_RATE, MAX_TAX_RATE] aralığına clip."""
+    # TODO (tax rate terfisi): Tek-dönem clamp'li efektif oranı → şirketin
+    # CAUSAL geçmiş ortalama efektif oranına çevir (sadece o döneme kadarki
+    # pozitif-pretax yıllardan; gelecekten ASLA — look-ahead bias).
+    # Bu terfi iki sorunu birden çözer:
+    #   (1) ana tax rate'i kararlı yapar (tek-dönem gürültüsünü giderir)
+    #   (2) pretax≤0 ama EBIT>0 dönemlerini şirket-içi GERÇEK veriyle doldurur (imputation değil)
+    # Yeterli causal geçmiş yoksa (ilk yıllar / kronik-zarar şirket) → NaN kalır (dürüst).
+    pretax = pd.Series(cf.pretax_income, dtype="float64")
+    tax_provision = pd.Series(cf.tax_provision, dtype="float64")
+    # pretax <= 0 olan dönemleri NaN yap (efektif oran tanımsız):
+    pretax_valid = pretax.where(pretax > 0, np.nan)
+    tax_rate = tax_provision / pretax_valid
+    # clamp (pandas .clip NaN'i KORUR, manuel min/max KULLANMA):
+    return tax_rate.clip(MIN_TAX_RATE, MAX_TAX_RATE)
+
+
+def _nopat(cf: CompanyFinancials) -> pd.Series:
+    """NOPAT = EBIT * (1 - tax_rate). EBIT katı (fallback yok)."""
+    ebit = pd.Series(cf.ebit, dtype="float64")
+    return ebit * (1 - _tax_rate(cf))
+
+
+def roic(cf: CompanyFinancials) -> list[float]:
+    """ROIC = NOPAT / Invested Capital, her dönem için.
+
+    NOPAT = EBIT * (1 - tax_rate); IC = total_debt + total_equity - cash
+    (dönem-sonu değerleri, MVP). tax_rate = tax_provision / pretax_income,
+    [MIN_TAX_RATE, MAX_TAX_RATE] aralığına clamp'lenir.
+
+    NaN davranışı: pretax_income <= 0 ise efektif oran tanımsız → o dönem NaN;
+    ic <= 0 ise (negatif/sıfır sermaye anlamsız) → NaN; herhangi bir bileşen
+    (ebit, tax_rate, debt, equity, cash) NaN ise sonuç NaN (pandas propagate).
+    """
+    nopat = _nopat(cf)
+
+    # PARÇA 3 — Invested Capital (dönem-sonu, MVP)
+    # TODO (invested capital terfisi): dönem-sonu yerine ortalama IC kullan
+    # (dönem başı + dönem sonu)/2 — bir dönem kaybı pahasına, teorik olarak doğru.
+    total_debt = pd.Series(cf.total_debt, dtype="float64")
+    total_equity = pd.Series(cf.total_equity, dtype="float64")
+    cash = pd.Series(cf.cash, dtype="float64")
+    ic = total_debt + total_equity - cash
+    # ic <= 0 ise NaN (negatif/sıfır sermaye anlamsız):
+    ic = ic.where(ic > 0, np.nan)
+
+    # PARÇA 4 — Birleştir
+    roic = nopat / ic
+    roic = roic.replace([np.inf, -np.inf], np.nan)
+    return roic.tolist()
