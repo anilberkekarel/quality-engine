@@ -4,6 +4,10 @@
 
 Indicator + expert judgment. On one side, the machine: it objectively filters a company's financial quality pattern. On the other side, me: I judge that signal with my technical and domain knowledge. Neither is enough alone — the machine sees the past but can't know the future; the human is intuitive but biased. This engine combines the two.
 
+## Methodology & reasoning
+
+For the full methodology, the clustering→spectrum pivot, results, and roadmap, see [STRATEGY.md](./STRATEGY.md).
+
 ## Why this engine exists
 
 What makes a company great is its product + vision + capacity to close a technological gap. These can't be measured directly, but they leave financial footprints. And the real question isn't being profitable right now — it's the capacity to **sustain** quality.
