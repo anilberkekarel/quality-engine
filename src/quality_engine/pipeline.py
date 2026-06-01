@@ -7,6 +7,7 @@ fizikseldir (leakage önlemi).
 """
 
 import logging
+import os
 import time
 
 import pandas as pd
@@ -18,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 def build_feature_matrix(
-    tickers: list[str], provider: DataProvider, delay: float = 0.0
+    tickers: list[str],
+    provider: DataProvider,
+    delay: float = 0.0,
+    save_dir: str | None = None,
 ) -> tuple:
     """Verilen ticker listesi için feature ve meta matrislerini kurar.
 
@@ -31,6 +35,9 @@ def build_feature_matrix(
 
     delay: her çağrı arası bekleme (saniye). Küçük testte 0, tüm evrende
     (~500 şirket) rate-limit için 0.2 gibi bir değer önerilir.
+
+    save_dir verilirse feature_matrix.csv ve meta_matrix.csv olarak
+    kaydedilir (index=ticker).
     """
     features_rows = []
     meta_rows = []
@@ -61,5 +68,11 @@ def build_feature_matrix(
         f"Matris kuruldu: {len(features_rows)} başarılı, "
         f"{len(basarisiz)} başarısız. Başarısız: {basarisiz}"
     )
+
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        feature_df.to_csv(os.path.join(save_dir, "feature_matrix.csv"))
+        meta_df.to_csv(os.path.join(save_dir, "meta_matrix.csv"))
+        logger.info(f"Matrisler kaydedildi: {save_dir}")
 
     return feature_df, meta_df
