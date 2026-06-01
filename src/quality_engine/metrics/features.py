@@ -8,6 +8,21 @@ calculator.py finansal mantık, features.py istatistiksel özetleme.
 import numpy as np
 import scipy.stats
 
+from .calculator import (
+    gross_margin, operating_margin, fcf_margin, revenue_growth,
+    roic, reinvestment_rate, rnd_to_revenue,
+)
+
+METRICS = {
+    "gross_margin": gross_margin,
+    "operating_margin": operating_margin,
+    "fcf_margin": fcf_margin,
+    "revenue_growth": revenue_growth,
+    "roic": roic,
+    "reinvestment_rate": reinvestment_rate,
+    "rnd_to_revenue": rnd_to_revenue,
+}
+
 
 def seri_ozetle(seri: list[float]) -> dict:
     """Bir metriğin zaman serisini clustering için özet feature'lara indirir.
@@ -52,3 +67,24 @@ def seri_ozetle(seri: list[float]) -> dict:
         "trend_r2": trend_r2,
         "n_valid": n_valid,
     }
+
+
+def extract_features(cf) -> dict:
+    """Bir şirketin CompanyFinancials'ından clustering feature'ları çıkarır.
+
+    Her metriği hesaplar, seri_ozetle ile özetler. Sonuç İKİ BÖLMELİ:
+    - features: clustering'e GİREN (level_last, trend, stability) — düz isimli
+    - meta: clustering'e GİRMEYEN (trend_r2, n_valid) — denetim/filtre,
+      data leakage'ı fiziksel önlemek için ayrı bölmede
+    """
+    features = {}
+    meta = {}
+    for name, fn in METRICS.items():
+        seri = fn(cf)
+        ozet = seri_ozetle(seri)
+        features[f"{name}_level_last"] = ozet["level_last"]
+        features[f"{name}_trend"] = ozet["trend"]
+        features[f"{name}_stability"] = ozet["stability"]
+        meta[f"{name}_trend_r2"] = ozet["trend_r2"]
+        meta[f"{name}_n_valid"] = ozet["n_valid"]
+    return {"features": features, "meta": meta}
