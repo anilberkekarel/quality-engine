@@ -28,19 +28,19 @@ def find_optimal_k(scaled_df: pd.DataFrame, k_min: int = 2, k_max: int = 8) -> d
     financial meaning; e.g. silhouette generally favors K=2 but that coarse
     binary split is not useful).
     """
-    sonuc = {}
+    scores = {}
     for k in range(k_min, k_max + 1):
         km = KMeans(n_clusters=k, random_state=42, n_init=10)
         labels = km.fit_predict(scaled_df)
-        sonuc[k] = {
+        scores[k] = {
             "inertia": km.inertia_,
             "silhouette": silhouette_score(scaled_df, labels),
         }
         logger.info(
             f"K={k}: inertia={km.inertia_:.1f}, "
-            f"silhouette={sonuc[k]['silhouette']:.3f}"
+            f"silhouette={scores[k]['silhouette']:.3f}"
         )
-    return sonuc
+    return scores
 
 
 def cluster(scaled_df: pd.DataFrame, k: int) -> dict:

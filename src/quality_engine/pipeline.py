@@ -42,14 +42,14 @@ def build_feature_matrix(
     """
     features_rows = []
     meta_rows = []
-    basarisiz = []
+    failed_tickers = []
 
     for ticker in tickers:
         try:
             cf = provider.get_financials(ticker)
             if not cf.period_end_dates:
                 logger.warning(f"{ticker}: empty data, skipping")
-                basarisiz.append(ticker)
+                failed_tickers.append(ticker)
                 continue
             result = extract_features(cf)
             result["features"]["ticker"] = ticker
@@ -58,7 +58,7 @@ def build_feature_matrix(
             meta_rows.append(result["meta"])
         except Exception as e:
             logger.warning(f"{ticker}: error ({type(e).__name__}: {e}), skipping")
-            basarisiz.append(ticker)
+            failed_tickers.append(ticker)
         if delay > 0:
             time.sleep(delay)
 
@@ -67,7 +67,7 @@ def build_feature_matrix(
 
     logger.info(
         f"Matrix built: {len(features_rows)} succeeded, "
-        f"{len(basarisiz)} failed. Failed: {basarisiz}"
+        f"{len(failed_tickers)} failed. Failed: {failed_tickers}"
     )
 
     if save_dir is not None:

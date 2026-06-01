@@ -78,9 +78,9 @@ def compute_qscore(
     directed = _apply_directions(ranked)
 
     factor_scores = pd.DataFrame(index=directed.index)
-    for grup, cols in FACTOR_GROUPS.items():
-        mevcut = [c for c in cols if c in directed.columns]
-        factor_scores[grup] = directed[mevcut].mean(axis=1)
+    for group, cols in FACTOR_GROUPS.items():
+        existing_cols = [c for c in cols if c in directed.columns]
+        factor_scores[group] = directed[existing_cols].mean(axis=1)
 
     if weights is None:
         weights = {g: 1.0 / len(FACTOR_GROUPS) for g in FACTOR_GROUPS}

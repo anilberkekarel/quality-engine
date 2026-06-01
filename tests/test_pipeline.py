@@ -1,8 +1,8 @@
-"""pipeline.build_feature_matrix için RESILIENCE testleri.
+"""RESILIENCE tests for pipeline.build_feature_matrix.
 
-Gerçek yfinance'a gitmeden, kontrollü sahte (mock) provider ile davranışı
-doğrular: hatalı/boş şirketler elenir, geçerliler matriste kalır, ve
-feature/meta ayrımı (leakage önlemi) korunur.
+Verifies behavior without hitting yfinance, using a controlled mock
+provider: failing/empty companies are dropped, valid ones remain in the
+matrix, and the feature/meta separation (leakage safeguard) is preserved.
 """
 
 import numpy as np
@@ -12,10 +12,10 @@ from quality_engine.pipeline import build_feature_matrix
 
 
 class MockProvider(DataProvider):
-    """Test için sahte provider. Önceden tanımlı senaryolar döndürür:
-    - 'GOOD': dolu, geçerli CompanyFinancials
-    - 'EMPTY': boş CompanyFinancials (geçersiz ticker simülasyonu)
-    - 'ERROR': exception fırlatır (yfinance hatası simülasyonu)
+    """Fake provider for tests. Returns predefined scenarios:
+    - 'GOOD': populated, valid CompanyFinancials
+    - 'EMPTY': empty CompanyFinancials (simulates an invalid ticker)
+    - 'ERROR': raises an exception (simulates a yfinance error)
     """
     def get_financials(self, ticker: str) -> CompanyFinancials:
         if ticker == "ERROR":
@@ -47,23 +47,23 @@ class MockProvider(DataProvider):
         )
 
 
-# TEST 1 — geçersiz/boş/hatalı şirketler elenir, geçerliler kalır
+# TEST 1 — invalid/empty/erroring companies are dropped, valid ones remain
 def test_pipeline_resilience():
     tickers = ["GOOD1", "EMPTY", "GOOD2", "ERROR", "GOOD3"]
     fdf, mdf = build_feature_matrix(tickers, MockProvider(), delay=0.0)
-    # 5 ticker'dan 3 GOOD kalmalı (EMPTY ve ERROR elendi)
+    # 3 GOOD out of 5 tickers should remain (EMPTY and ERROR dropped)
     assert list(fdf.index) == ["GOOD1", "GOOD2", "GOOD3"]
-    assert fdf.shape == (3, 21)   # 3 şirket, 21 feature
-    assert mdf.shape == (3, 14)   # 3 şirket, 14 meta
-    # EMPTY ve ERROR matriste YOK (resilience)
+    assert fdf.shape == (3, 21)   # 3 companies, 21 features
+    assert mdf.shape == (3, 14)   # 3 companies, 14 meta
+    # EMPTY and ERROR NOT in the matrix (resilience)
     assert "EMPTY" not in fdf.index
     assert "ERROR" not in fdf.index
 
 
-# TEST 2 — leakage ayrımı korunuyor (feature/meta sütunları karışmamış)
+# TEST 2 — leakage separation preserved (feature/meta columns not mixed)
 def test_pipeline_no_leakage():
     fdf, mdf = build_feature_matrix(["GOOD1"], MockProvider(), delay=0.0)
-    # feature matrisinde meta sütunu (r2, n_valid) OLMAMALI
+    # feature matrix MUST NOT contain meta columns (r2, n_valid)
     assert not any("_r2" in c or "_n_valid" in c for c in fdf.columns)
-    # meta matrisinde sadece meta sütunları olmalı
+    # meta matrix should only contain meta columns
     assert all("_r2" in c or "_n_valid" in c for c in mdf.columns)

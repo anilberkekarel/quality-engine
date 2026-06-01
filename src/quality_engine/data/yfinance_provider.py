@@ -1,4 +1,4 @@
-"""yfinance üzerinden DataProvider sözleşmesini gerçekleyen sağlayıcı."""
+"""Provider that implements the DataProvider contract via yfinance."""
 
 import logging
 
@@ -47,7 +47,7 @@ class YFinanceProvider(DataProvider):
         )
 
         if len(date_index) == 0:
-            logger.warning(f"{ticker}: hiçbir tablo veri içermiyor (geçersiz ticker olabilir)")
+            logger.warning(f"{ticker}: no table contains data (ticker may be invalid)")
             return CompanyFinancials(
                 ticker=ticker,
                 period_end_dates=[],
@@ -59,7 +59,7 @@ class YFinanceProvider(DataProvider):
 
         def _extract(df: pd.DataFrame, yf_row_name: str, date_axis: pd.Index) -> list[float]:
             if yf_row_name not in df.index:
-                logger.warning(f"{ticker}: '{yf_row_name}' satırı eksik")
+                logger.warning(f"{ticker}: '{yf_row_name}' row missing")
                 return [np.nan] * len(date_axis)
             row = df.loc[yf_row_name]
             if isinstance(row, pd.DataFrame):
@@ -71,10 +71,10 @@ class YFinanceProvider(DataProvider):
         balance_values = {k: _extract(balance, v, date_index) for k, v in BALANCE_MAP.items()}
         cashflow_values = {k: _extract(cashflow, v, date_index) for k, v in CASHFLOW_MAP.items()}
 
-        # Provider, aynı gerçek-dünya büyüklüğünün kaynaklar arası farklı
-        # kodlanmasını standartlaştırabilir (capex işareti: yfinance negatif,
-        # motor pozitif bekler), ama veriyi değiştiremez/türetemez/dolduramaz.
-        # capex'i pozitif harcama miktarı standardına çek; NaN'ler NaN kalır.
+        # The provider may standardize cross-source encoding of the same real-world
+        # quantity (capex sign: yfinance returns negative, the engine expects
+        # positive), but it must not modify/derive/fill data.
+        # Convert capex to the positive-spend convention; NaNs stay NaN.
         cashflow_values["capex"] = [abs(v) for v in cashflow_values["capex"]]
 
         return CompanyFinancials(

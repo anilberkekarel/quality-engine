@@ -25,7 +25,7 @@ METRICS = {
 }
 
 
-def seri_ozetle(seri: list[float]) -> dict:
+def summarize_series(series: list[float]) -> dict:
     """Reduce a metric's time series to summary features for clustering.
 
     Clustering features (raw values; z-score normalization happens in M4):
@@ -46,7 +46,7 @@ def seri_ozetle(seri: list[float]) -> dict:
     Thresholds: level_last >=1, stability >=2, trend >=3 non-NaN points;
     otherwise NaN.
     """
-    arr = np.asarray(seri, dtype="float64")
+    arr = np.asarray(series, dtype="float64")
     valid_mask = ~np.isnan(arr)
     x = np.where(valid_mask)[0]
     y = arr[valid_mask]
@@ -75,8 +75,8 @@ def seri_ozetle(seri: list[float]) -> dict:
 def extract_features(cf) -> dict:
     """Extract clustering features from a company's CompanyFinancials.
 
-    Computes every metric and summarizes it via seri_ozetle. The result has
-    TWO compartments:
+    Computes every metric and summarizes it via summarize_series. The result
+    has TWO compartments:
     - features: ENTERS clustering (level_last, trend, stability) — flat names
     - meta: does NOT enter clustering (trend_r2, n_valid) — audit/filter, in
       a separate compartment to physically prevent data leakage
@@ -84,11 +84,11 @@ def extract_features(cf) -> dict:
     features = {}
     meta = {}
     for name, fn in METRICS.items():
-        seri = fn(cf)
-        ozet = seri_ozetle(seri)
-        features[f"{name}_level_last"] = ozet["level_last"]
-        features[f"{name}_trend"] = ozet["trend"]
-        features[f"{name}_stability"] = ozet["stability"]
-        meta[f"{name}_trend_r2"] = ozet["trend_r2"]
-        meta[f"{name}_n_valid"] = ozet["n_valid"]
+        series = fn(cf)
+        summary = summarize_series(series)
+        features[f"{name}_level_last"] = summary["level_last"]
+        features[f"{name}_trend"] = summary["trend"]
+        features[f"{name}_stability"] = summary["stability"]
+        meta[f"{name}_trend_r2"] = summary["trend_r2"]
+        meta[f"{name}_n_valid"] = summary["n_valid"]
     return {"features": features, "meta": meta}

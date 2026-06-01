@@ -31,14 +31,14 @@ def main():
     qscore = result["qscore"]
     buckets = result["buckets"]
 
-    cikti = pd.DataFrame({
+    output_df = pd.DataFrame({
         "qscore": qscore.round(1),
         "bucket": buckets,
     })
     print("\n=== QSCORE RANKING (all companies) ===")
-    print(cikti.to_string())
+    print(output_df.to_string())
 
-    cikti.to_csv("_cache/qscore_output.csv")
+    output_df.to_csv("_cache/qscore_output.csv")
     print(f"\nOutput saved: _cache/qscore_output.csv")
     print(f"Q1 (premium): {(buckets == 'Q1').sum()} companies")
 

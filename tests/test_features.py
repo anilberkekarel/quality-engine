@@ -1,17 +1,18 @@
-"""features.py (seri_ozetle) için risk-temelli testler.
+"""Risk-based tests for features.py (summarize_series).
 
-Aşama 2 özetleme: bilinen tuzakları yakalayan minimum test seti.
+Stage 2 summarization: a minimum test set that catches the known traps.
 """
 
 import numpy as np
 
 from quality_engine.data.base import CompanyFinancials
-from quality_engine.metrics.features import seri_ozetle, extract_features
+from quality_engine.metrics.features import summarize_series, extract_features
 
 
 def make_cf(**kwargs):
-    """CompanyFinancials üretir: verilen alanları kullanır, verilmeyen 14 finansal
-    alanı aynı uzunlukta [np.nan] listesiyle doldurur (zorunlu alanlar dolu kalsın)."""
+    """Build a CompanyFinancials: use the given fields and fill the other 14
+    financial fields with a same-length [np.nan] list (so required fields
+    stay populated)."""
     n = len(next(v for v in kwargs.values() if isinstance(v, list)))
     fields = ["revenue", "cogs", "operating_income", "ebit", "pretax_income",
               "tax_provision", "rnd_expense", "depreciation", "total_debt",
@@ -25,56 +26,56 @@ def make_cf(**kwargs):
     )
 
 
-# TEST 1 — bilinen eğim (düzenli artış -> tam eğim, R²=1)
-def test_seri_ozetle_known_slope():
-    # [0.10,0.20,0.30] düzenli 0.10 artış -> trend=0.10, r2=1.0, n_valid=3
-    r = seri_ozetle([0.10, 0.20, 0.30])
+# TEST 1 — known slope (regular increase -> exact slope, R²=1)
+def test_summarize_series_known_slope():
+    # [0.10,0.20,0.30] regular 0.10 increase -> trend=0.10, r2=1.0, n_valid=3
+    r = summarize_series([0.10, 0.20, 0.30])
     np.testing.assert_allclose(r["trend"], 0.10, rtol=1e-9)
     np.testing.assert_allclose(r["trend_r2"], 1.0, rtol=1e-9)
     assert r["level_last"] == 0.30
     assert r["n_valid"] == 3
 
 
-# TEST 2 — POZİSYON KORUMASI (NaN atlanır ama x pozisyonu korunur)
-# KRİTİK: np.where yerine range kullanılırsa bu test patlar
-def test_seri_ozetle_position_preserved():
-    # [nan,0.10,0.20,0.30]: dolu x=[1,2,3], y=[0.10,0.20,0.30]
-    # eğim hâlâ 0.10 (pozisyon korunduğu için), n_valid=3
-    r = seri_ozetle([np.nan, 0.10, 0.20, 0.30])
+# TEST 2 — POSITION PRESERVATION (NaN is skipped but x position is preserved)
+# CRITICAL: if range is used instead of np.where, this test breaks
+def test_summarize_series_position_preserved():
+    # [nan,0.10,0.20,0.30]: non-NaN x=[1,2,3], y=[0.10,0.20,0.30]
+    # slope is still 0.10 (because position is preserved), n_valid=3
+    r = summarize_series([np.nan, 0.10, 0.20, 0.30])
     np.testing.assert_allclose(r["trend"], 0.10, rtol=1e-9)
     assert r["n_valid"] == 3
     assert r["level_last"] == 0.30
 
 
-# TEST 3 — eşik: tam 2 nokta (stability VAR, trend NaN)
-def test_seri_ozetle_two_points_no_trend():
-    r = seri_ozetle([0.10, 0.20])
-    assert not np.isnan(r["stability"])  # >=2 -> stability var
+# TEST 3 — threshold: exactly 2 points (stability EXISTS, trend NaN)
+def test_summarize_series_two_points_no_trend():
+    r = summarize_series([0.10, 0.20])
+    assert not np.isnan(r["stability"])  # >=2 -> stability exists
     assert np.isnan(r["trend"])          # <3 -> trend NaN
     assert r["n_valid"] == 2
 
 
-# TEST 4 — eşik: tam 1 nokta (sadece level_last)
-def test_seri_ozetle_one_point_only_level():
-    r = seri_ozetle([0.5])
+# TEST 4 — threshold: exactly 1 point (only level_last)
+def test_summarize_series_one_point_only_level():
+    r = summarize_series([0.5])
     assert r["level_last"] == 0.5
     assert np.isnan(r["stability"])
     assert np.isnan(r["trend"])
     assert r["n_valid"] == 1
 
 
-# TEST 5 — hepsi NaN (kenar: patlamamalı, her şey NaN, n_valid=0)
-def test_seri_ozetle_all_nan():
-    r = seri_ozetle([np.nan, np.nan, np.nan])
+# TEST 5 — all NaN (edge: must not crash, everything NaN, n_valid=0)
+def test_summarize_series_all_nan():
+    r = summarize_series([np.nan, np.nan, np.nan])
     assert np.isnan(r["level_last"])
     assert np.isnan(r["trend"])
     assert np.isnan(r["stability"])
     assert r["n_valid"] == 0
 
 
-# extract_features yapı testi: iki bölme, doğru anahtar sayıları, ayrım
+# extract_features structure test: two compartments, expected key counts, separation
 def test_extract_features_structure():
-    # basit dolu cf (5 dönem), tüm metrikler hesaplanabilsin
+    # simple populated cf (5 periods), every metric computable
     cf = make_cf(
         revenue=[100.0,110.0,120.0,130.0,140.0],
         cogs=[40.0,44.0,48.0,52.0,56.0],
@@ -92,13 +93,13 @@ def test_extract_features_structure():
         change_in_working_capital=[2.0,2.0,2.0,2.0,2.0],
     )
     result = extract_features(cf)
-    # iki bölme var mı
+    # both compartments present
     assert "features" in result and "meta" in result
-    # 7 metrik × 3 feature = 21
+    # 7 metrics × 3 features = 21
     assert len(result["features"]) == 21
-    # 7 metrik × 2 meta = 14
+    # 7 metrics × 2 meta = 14
     assert len(result["meta"]) == 14
-    # KRİTİK: meta anahtarları features'a sızmamış (leakage kontrolü)
+    # CRITICAL: meta keys did not leak into features (leakage check)
     assert not any("_r2" in k or "_n_valid" in k for k in result["features"])
-    # feature anahtarları meta'ya sızmamış
+    # feature keys did not leak into meta
     assert all("_r2" in k or "_n_valid" in k for k in result["meta"])
