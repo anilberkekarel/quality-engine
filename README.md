@@ -51,19 +51,23 @@ python3 -m venv venv
 source venv/bin/activate
 pip install yfinance pandas numpy scipy scikit-learn pytest
 
-# build the feature matrix (one-time, cached)
-PYTHONPATH=src python3 -c "from quality_engine.data.universe import get_sp500_tickers; \
-from quality_engine.data.yfinance_provider import YFinanceProvider; \
-from quality_engine.pipeline import build_feature_matrix; \
-build_feature_matrix(get_sp500_tickers()[:200], YFinanceProvider(), delay=0.3, save_dir='_cache')"
-
-# run the engine end-to-end
-PYTHONPATH=src python3 run.py
+# run the engine — fetches data on first run, caches it, then scores
+PYTHONPATH=src python3 run.py --companies 200 --delay 0.3
 ```
+
+On first run the engine fetches fundamentals (this takes a few minutes and is cached afterward), then ranks the companies by QScore. Options:
+
+- `--companies N` — number of companies to analyze (random S&P 500 sample, max ~503; default 200)
+- `--delay D` — seconds between fetches, rate-limit protection for the free yfinance source (default 0.3)
+- `--seed S` — random seed for reproducible sampling (default 42)
+
+Run `python3 run.py --help` for details.
 
 Tests: `PYTHONPATH=src python3 -m pytest tests/ -v` (22 risk-based tests).
 
 ## Example output
+
+The example below uses a 200-company sample (154 remain after filtering out financials, REITs, and incomplete data). The architecture scales to the full ~503-company index — the only constraint is the throughput of the free data source, not the engine. Phase 2's move to a richer data provider removes that limit.
 
 Top of the ranking (equal-weight baseline):
 
