@@ -1,4 +1,4 @@
-"""Ham feature matrisini clustering'e hazırlama: R&D düşür, NaN eşiği, z-score.
+"""Ham feature matrisini clustering'e hazırlama: R&D düşür, NaN eşiği, rank dönüşümü.
 
 Sadece FEATURE matrisini işler. Meta matrisi (r2, n_valid) buraya
 girmez — leakage ayrımı fiziksel korunur.
@@ -7,7 +7,6 @@ girmez — leakage ayrımı fiziksel korunur.
 import logging
 
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +23,25 @@ def prepare_matrix(feature_df: pd.DataFrame, max_nan: int = 0) -> dict:
     2. Eksik-veri eşiği: satır başına NaN sayısı > max_nan olan şirketleri at.
        max_nan=0 (varsayılan) = sadece tam-temiz şirketler kalır (imputation
        gereksiz, K-means NaN kabul etmez).
-    3. Evren-geneli z-score (sklearn StandardScaler): her feature ortalama 0,
-       std 1. Clustering ölçek-duyarlı, bu zorunlu.
+    3. Evren-geneli rank dönüşümü (pd.DataFrame.rank, method="average",
+       pct=True): her feature evren-içi yüzdelik sırasına [0,1] çevrilir.
+       RobustScaler bile yapısal uçları (MCK gibi z~31) ehlileştiremedi; rank
+       uçları kökten çözer (en yüksek = 1.0, en düşük = 0.0), hiçbir şirketi
+       atmaz, veri uydurmaz (sıra gerçek bilgidir). MCK en yüksek ROIC'li
+       kalır (rank=1.0) ama ezici etkisi gider — clustering mesafeyi sıra
+       üzerinden ölçer, mutlak büyüklük üzerinden değil.
+
+       NÜANS — RANK EVRENE GÖRELİDİR: yeni şirket eklenince TÜM evren yeniden
+       rank'lenmeli. Stateless: RobustScaler/StandardScaler'ın "fit ettim,
+       sonra transform ederim" davranışı YOK; bu yüzden return'deki "scaler"
+       None.
 
     SADECE feature matrisini işler — meta (r2, n_valid) buraya GİRMEZ
     (leakage ayrımı korunur).
 
     Döndürür (dict):
-    - scaled: pd.DataFrame, kalan şirketler × kalan feature, z-score'lu
-    - scaler: fit edilmiş StandardScaler (ileride yeni veri için aynı ölçek)
+    - scaled: pd.DataFrame, kalan şirketler × kalan feature, rank [0,1]
+    - scaler: None (rank stateless; yeni veri için tüm evren yeniden rank'lenir)
     - kept: kalan ticker listesi
     - dropped: elenen ticker listesi (denetim/geri-kazanım için)
     - feature_names: kalan feature isimleri (sıra önemli)
@@ -51,13 +60,13 @@ def prepare_matrix(feature_df: pd.DataFrame, max_nan: int = 0) -> dict:
         f"(R&D düşürüldü, max_nan={max_nan}). Elenen: {dropped}"
     )
 
-    scaler = StandardScaler()
-    scaled_values = scaler.fit_transform(kept_df)
-    scaled = pd.DataFrame(scaled_values, index=kept_df.index, columns=kept_df.columns)
+    # rank dönüşümü: her feature evren-içi yüzdelik sıra [0,1]
+    # method="average" (eşit değerlere ortalama sıra), pct=True (0-1 normalize)
+    scaled = kept_df.rank(method="average", pct=True)
 
     return {
         "scaled": scaled,
-        "scaler": scaler,
+        "scaler": None,
         "kept": kept,
         "dropped": dropped,
         "feature_names": list(kept_df.columns),
