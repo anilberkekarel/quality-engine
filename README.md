@@ -1,53 +1,118 @@
 # Quality Pattern Engine
 
-> Personal progress note — to be replaced with a professional README when this goes public.
+**A capital-efficiency-tilted factor model that screens equities for sustainable quality — built as a human-plus-machine analysis engine, not a black box.**
 
-Indicator + expert judgment. On one side, the machine: it objectively filters a company's financial quality pattern. On the other side, me: I judge that signal with my technical and domain knowledge. Neither is enough alone — the machine sees the past but can't know the future; the human is intuitive but biased. This engine combines the two.
+The machine filters the financial footprint of quality objectively; the human supplies the technical and domain judgment a balance sheet cannot. The machine screens the past; the human judges the future.
 
-## Methodology & reasoning
+![Quality is a spectrum, not clusters](docs/quality_spectrum_pca.png)
 
-For the full methodology, the clustering→spectrum pivot, results, and roadmap, see [STRATEGY.md](./STRATEGY.md).
+*154 S&P 500 companies projected into PCA space, colored by their composite QScore. The data forms a single continuous cloud — there are no discrete "quality clusters." Quality is a spectrum, and the score recovers it: high-scoring names (FICO, Adobe, Amphenol) sit at one end, capital-intensive cyclicals (GM, ON, Intel) at the other.*
 
-## Why this engine exists
+---
 
-What makes a company great is its product + vision + capacity to close a technological gap. These can't be measured directly, but they leave financial footprints. And the real question isn't being profitable right now — it's the capacity to **sustain** quality.
+## What it does
 
-The market is full of "winner-predicting" models; most memorize past winners and miss the future (survivorship + look-ahead bias). This engine's goal isn't prediction: first filter the financial quality pattern without bias, then evaluate whatever passes that filter with human judgment. Not a magic box — a thinking tool.
+Given a universe of companies, the engine:
 
-## How it works (high level)
+1. Pulls fundamentals through a source-agnostic data layer (yfinance today; designed to swap to a richer provider without a rewrite).
+2. Computes seven quality metrics from raw statements — margins, revenue growth, ROIC, and reinvestment — including derived measures (ROIC via NOPAT / invested capital, reinvestment via Damodaran's net-capex method) that are not available off-the-shelf.
+3. Summarizes each metric's time series into level, trend, and stability features.
+4. Ranks every company on every feature, aggregates into a single **QScore (0-100)**, and sorts the universe from premium quality to value trap.
 
-1. **The machine filters.** It scans the S&P 500 universe on quality-growth metrics and separates it into natural groups via unsupervised clustering. No "winner" label — just the current financial pattern. Output: a handful of candidates.
-2. **History validates.** "If this engine had run in the past, would it have caught the known quality companies?" — to test the model, not to memorize it.
-3. **The human judges.** I evaluate the candidates with my technical and domain knowledge: is this quality sustainable, will technology disrupt it? The real value is here — seeing what the financials can't.
+The output is a ranked list of candidates for human review — not an automated buy signal.
 
-The machine filters the past; I judge the future.
+## How it works
 
-## Design philosophy
+```mermaid
+flowchart LR
+    A[Data layer<br/>source-agnostic] --> B[Metrics<br/>margins, ROIC,<br/>reinvestment]
+    B --> C[Feature extraction<br/>level / trend / stability]
+    C --> D[Universe<br/>S&P 500]
+    D --> E[Feature matrix<br/>companies x features]
+    E --> F[Preprocessing<br/>rank transform,<br/>missing-data filter]
+    F --> G[QScore<br/>factor groups,<br/>0-100, quantiles]
+    G --> H[Ranked candidates<br/>for human judgment]
+```
 
-Every part of the engine is bound to a few principles:
+Each stage is a separate, tested module. The design separates concerns deliberately: the data layer is swappable, the metrics are derived transparently, and a strict feature/meta split keeps audit information (R-squared, sample size) out of the scoring path to prevent data leakage.
 
-- **Source-agnostic.** The data source sits behind a swappable interface. It starts today with a free source; tomorrow, moving to a higher-quality source is possible without rewriting the engine.
-- **Honesty > completeness.** Missing data is never fabricated. Saying "I don't know" is better than producing a wrong number — because the engine's entire value rests on the honesty of the signal.
-- **Clear human/machine split.** The machine measures what's measurable; interpretation, sustainability, and disruption risk are left to the human. The engine doesn't replace the human — it amplifies them.
-- **Tested, non-brittle code.** Points with high bug-producing risk are guarded by automated tests; if a change silently breaks something old, it's caught immediately.
+## Methodology highlight
 
-## Where we are
+The original design called for unsupervised clustering. The data refused: K-means produced either meaningless splits (a single structural outlier isolated from an undifferentiated mass) or low-quality boundaries, and a PCA projection showed the first two components explaining only 36% of variance — a continuous cloud, not discrete groups.
 
-**Done:** The data layer (source-agnostic, tested against real data) and the first stage of the metric layer (core quality-growth metrics, as time series). Bug-prone points are guarded by automated tests. Commit automation is set up.
+So the architecture pivoted from clustering to **continuous quantile scoring**, and outliers were tamed at the root with a cross-sectional rank transform (preserving order without letting a single extreme value dominate). This was a hypothesis tested against data, refuted, and updated — not a model forced onto unwilling data.
 
-**Next:** Extracting summary features from the metrics to feed clustering and making them comparable. Then the universe definition and sector filter. Then the engine's brain: clustering and cluster interpretation. Last: historical validation.
+The full reasoning — philosophy, the clustering-to-spectrum pivot, results, limitations, and roadmap — is in **[STRATEGY.md](./STRATEGY.md)**.
 
-## How it can be improved
+## Quick start
 
-- A higher-quality data source (ready-made derived metrics, deeper history) — requires no interface change.
-- Intra-sector normalization: metrics from different sectors can't be compared directly; solving this opens the engine to a broader universe.
-- Richer metrics and clustering methods, but measured — each new metric carries noise risk, and the decision to add one must rest on the data.
-- Deepening validation: testing the engine's past behavior more systematically.
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install yfinance pandas numpy scipy scikit-learn pytest
 
-## Future value
+# build the feature matrix (one-time, cached)
+PYTHONPATH=src python3 -c "from quality_engine.data.universe import get_sp500_tickers; \
+from quality_engine.data.yfinance_provider import YFinanceProvider; \
+from quality_engine.pipeline import build_feature_matrix; \
+build_feature_matrix(get_sp500_tickers()[:200], YFinanceProvider(), delay=0.3, save_dir='_cache')"
 
-In the long run, this engine is the "quality" leg of an investment-thesis-generation tool. The goal is to combine financial discipline with technical/domain judgment in a single flow — surrendering to neither purely quantitative models nor pure intuition. It's also an engineering exercise in its own right: source-agnostic architecture, honest data handling, test discipline.
+# run the engine end-to-end
+PYTHONPATH=src python3 run.py
+```
 
-## Tech stack
+Tests: `PYTHONPATH=src python3 -m pytest tests/ -v` (22 risk-based tests).
 
-Python · pandas · numpy · yfinance · scikit-learn (next) · pytest. A modular, layered, testable design.
+## Example output
+
+Top of the ranking (equal-weight baseline):
+
+| Rank | Ticker | QScore | Bucket |
+|------|--------|--------|--------|
+| 1 | FICO | 100.0 | Q1 |
+| 2 | APH | 97.5 | Q1 |
+| 3 | ADBE | 97.0 | Q1 |
+| 4 | APP | 94.8 | Q1 |
+| 5 | PTC | 94.0 | Q1 |
+| 6 | META | 91.3 | Q1 |
+| 7 | NFLX | 89.2 | Q1 |
+
+Recurring-revenue software, ratings, and exchange businesses dominate the top — textbook capital-light compounders. Capital-intensive cyclicals (autos, refiners, semis-at-trough) fall to the bottom.
+
+## What this is — and isn't
+
+This is an honest **V1: smart beta, not alpha.** It rewards the *known* definition of quality, so it recovers *known* quality names. Specifically:
+
+- **Not sector-neutral.** The top skews toward software/financial-data because those sectors are structurally capital-light. The model currently expresses a "long-quality-sectors" tilt rather than a pure within-sector quality signal.
+- **Not yet validated.** A high QScore asserts a quality *profile* today, not proven *forward returns*. An out-of-sample information-coefficient test is the next validation step.
+- **The capital-light tilt is a thesis choice.** Treating low reinvestment as good rewards Apple/Visa-type businesses and ranks down reinvestment-heavy growth-quality (this is why NVIDIA sits in Q2, not Q1). A compound-growth thesis would invert that signal.
+
+Naming these boundaries is part of the work. They define the road to V2.
+
+## Phase 2 — where this goes
+
+The current engine is the skeleton. The next phase changes the signal design on top of it in two directions:
+
+- **From levels to acceleration.** Today's score is dominated by absolute levels, so it confirms companies that are *already* obviously high quality. The more valuable signal is the *second derivative* — catching quality while it is still forming, by weighting the inflection in margins and returns rather than the plateau.
+- **From a generic universe to a proprietary one.** A quality screen on the S&P 500 is a crowded trade. The structural edge lies where large funds cannot go for liquidity reasons — the under-covered micro/small-cap universe of deep-technical niches (space, defence, edge AI), where genuine technical-moat judgment, not balance-sheet ratios alone, separates signal from noise.
+
+The combined direction — an early-acceleration signal applied to an under-covered, domain-specific universe — is the working thesis for Phase 2. This V1 is the financial-analysis foundation of a broader engineer-to-investor thesis at the intersection of deep-tech and capital allocation.
+
+## Project structure
+
+```
+src/quality_engine/
+  data/          source-agnostic data layer (DataProvider ABC, YFinanceProvider, universe)
+  metrics/       metric calculation + feature extraction
+  clustering/    K-means (retained from the clustering experiment; see STRATEGY.md)
+  preprocessing.py   rank transform, missing-data filter
+  scoring.py     QScore: factor groups, direction correction, quantile buckets
+  pipeline.py    orchestration: universe -> feature matrix
+run.py           end-to-end entry point
+tests/           22 risk-based tests
+STRATEGY.md      investment strategy memo (full methodology)
+```
+
+---
+
+*This is a research and learning project, not investment advice.*
