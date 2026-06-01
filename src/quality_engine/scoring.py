@@ -1,8 +1,8 @@
-"""QScore: rank matrisinden quality skoru üretir.
+"""QScore: produces a quality score from the rank matrix.
 
-Akış: yön düzeltmesi -> faktör grupları (grup-içi ortalama, accidental
-weighting'i önler) -> faktör ağırlıkları (varsayılan EŞİT, confirmation
-bias'tan kaçınma) -> 0-100 -> quintile sepetler (Q1=premium).
+Flow: direction correction -> factor groups (in-group mean, prevents
+accidental weighting) -> factor weights (default EQUAL, avoids confirmation
+bias) -> 0-100 -> quintile buckets (Q1=premium).
 """
 
 import logging
@@ -11,13 +11,13 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Yön düzeltmesi gereken feature'lar (yüksek rank = KÖTÜ -> 1-rank ile çevir):
-# - tüm stability'ler (yüksek std = oynak = kötü)
-# - reinvestment level + trend (capital-light tezi: düşük yatırım = iyi)
+# Features whose direction needs correcting (high rank = BAD -> invert with 1-rank):
+# - all stability features (high std = volatile = bad)
+# - reinvestment level + trend (capital-light thesis: low reinvestment = good)
 INVERT_SUFFIXES = ("_stability",)
 INVERT_EXACT = {"reinvestment_rate_level_last", "reinvestment_rate_trend"}
 
-# 4 makro-faktör grubu (feature -> grup). 18 feature.
+# 4 macro-factor groups (feature -> group). 18 features.
 FACTOR_GROUPS = {
     "profitability": [
         "gross_margin_level_last", "operating_margin_level_last",
@@ -40,8 +40,8 @@ FACTOR_GROUPS = {
 
 
 def _apply_directions(ranked: pd.DataFrame) -> pd.DataFrame:
-    """Yön düzeltmesi: 'düşük=iyi' feature'ları 1-rank ile çevir.
-    Böylece TÜM feature'larda yüksek değer = iyi olur (tutarlı yön).
+    """Direction correction: invert 'low=good' features with 1-rank.
+    After this, ALL features have high value = good (consistent direction).
     """
     df = ranked.copy()
     for col in df.columns:
@@ -53,27 +53,27 @@ def _apply_directions(ranked: pd.DataFrame) -> pd.DataFrame:
 def compute_qscore(
     ranked: pd.DataFrame, weights: dict = None, n_buckets: int = 5
 ) -> dict:
-    """Rank matrisinden QScore üretir.
+    """Produce a QScore from the rank matrix.
 
-    Adımlar:
-    1. Yön düzeltmesi (_apply_directions): stability + reinvestment ters
-       çevrilir, tüm feature'larda yüksek = iyi olur.
-    2. Her makro-faktör için grup-içi ortalama (faktör skoru). Bu,
-       'accidental weighting'i önler — istikrar 6 feature ama tek faktör
-       olarak %25 ağırlık alır, 6/18 değil.
-    3. Faktörleri ağırlıkla topla. weights=None -> EŞİT ağırlık (baseline,
-       her faktör %25). confirmation bias'tan kaçınmak için varsayılan eşit.
-    4. Min-Max ile 0-100'e oturt.
-    5. Quintile sepetler (n_buckets=5): Q1=en yüksek (premium), Q5=en düşük.
+    Steps:
+    1. Direction correction (_apply_directions): stability + reinvestment
+       are inverted so that high = good for ALL features.
+    2. In-group mean per macro-factor (factor score). This prevents
+       'accidental weighting' — stability has 6 features but, as a single
+       factor, gets 25% weight, not 6/18.
+    3. Sum factors with weights. weights=None -> EQUAL weights (baseline,
+       25% per factor). Default is equal to avoid confirmation bias.
+    4. Min-Max scale to 0-100.
+    5. Quintile buckets (n_buckets=5): Q1=highest (premium), Q5=lowest.
 
-    ranked: prepare_matrix'in 'scaled' çıktısı (rank uzayı, 0-1).
-    weights: {faktör: ağırlık} veya None (eşit). Toplamı 1 olmalı.
+    ranked: the 'scaled' output of prepare_matrix (rank space, 0-1).
+    weights: {factor: weight} or None (equal). Must sum to 1.
 
-    Döndürür (dict):
-    - qscore: pd.Series (ticker -> 0-100 skor, yüksek=iyi), sıralı
-    - factor_scores: pd.DataFrame (ticker × 4 faktör, grup-içi ortalamalar)
+    Returns (dict):
+    - qscore: pd.Series (ticker -> 0-100 score, high=good), sorted
+    - factor_scores: pd.DataFrame (ticker × 4 factors, in-group means)
     - buckets: pd.Series (ticker -> Q1..Q5, Q1=premium)
-    - weights: kullanılan ağırlıklar
+    - weights: weights used
     """
     directed = _apply_directions(ranked)
 
@@ -90,17 +90,17 @@ def compute_qscore(
     qscore = qscore.sort_values(ascending=False)
     qscore.name = "qscore"
 
-    # pd.qcut etiketleri düşükten yükseğe atar; Q1=premium istediğimiz için
-    # etiketleri tersten veriyoruz (en düşük bin -> Q_n, en yüksek bin -> Q1).
+    # pd.qcut assigns labels from low to high; since we want Q1=premium we
+    # pass the labels reversed (lowest bin -> Q_n, highest bin -> Q1).
     bucket_labels = [f"Q{n_buckets - i}" for i in range(n_buckets)]
     buckets = pd.qcut(qscore, q=n_buckets, labels=bucket_labels)
     buckets.name = "bucket"
 
     logger.info(
-        f"QScore: {len(qscore)} şirket, {n_buckets} sepet. "
-        f"Ağırlık: {weights}"
+        f"QScore: {len(qscore)} companies, {n_buckets} buckets. "
+        f"Weights: {weights}"
     )
-    logger.info(f"Sepet dağılımı:\n{buckets.value_counts().sort_index()}")
+    logger.info(f"Bucket distribution:\n{buckets.value_counts().sort_index()}")
 
     return {
         "qscore": qscore,

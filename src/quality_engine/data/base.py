@@ -1,4 +1,4 @@
-"""Veri katmanının soyut sözleşmesi: ham finansal taşıyıcı ve sağlayıcı arayüzü."""
+"""The data layer's abstract contract: raw financial carrier and provider interface."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -27,5 +27,5 @@ class CompanyFinancials:
 class DataProvider(ABC):
     @abstractmethod
     def get_financials(self, ticker: str) -> CompanyFinancials:
-        """Verilen ticker için ham finansalları döndüren sözleşme."""
+        """Contract that returns raw financials for the given ticker."""
         ...

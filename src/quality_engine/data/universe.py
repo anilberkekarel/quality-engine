@@ -1,7 +1,8 @@
-"""S&P 500 evren tanımı — veri sağlayıcıdan AYRI sorumluluk.
+"""S&P 500 universe definition — SEPARATE responsibility from the data provider.
 
-Evren (hangi şirketler aday) ile finansal veri (yfinance/FMP) farklı
-katmanlardır: aynı evren üzerinde sağlayıcı değiştirilebilsin diye.
+Universe (which companies are candidates) and financial data (yfinance/FMP)
+are different layers so that the provider can be swapped while keeping the
+universe definition stable.
 """
 
 import logging
@@ -18,30 +19,32 @@ CACHE_PATH = Path(__file__).parent / "_cache" / "sp500_tickers.csv"
 
 
 def get_sp500_tickers(use_cache: bool = True) -> list[str]:
-    """Güncel S&P 500 ticker listesini döndürür.
+    """Return the current S&P 500 ticker list.
 
-    UYARI — SURVIVORSHIP BIAS: Bu liste BUGÜNKÜ S&P 500 üyeleridir,
-    yani 'hayatta kalanlar'. Endeksten düşen/batan/satın alınan şirketler
-    YOK. Mevcut aday taraması için geçerlidir, ANCAK tarihsel validation
-    (Katman 2 — 'motor 2015'te X'i yakalar mıydı') için UYGUN DEĞİLDİR;
-    o test için tarihsel üyelik verisi gerekir. Bu listeyi validation'da
-    kullanma.
+    WARNING — SURVIVORSHIP BIAS: this list contains TODAY's S&P 500 members,
+    i.e. the 'survivors'. Companies that were dropped from the index, went
+    bankrupt, or were acquired are NOT here. It is valid for current
+    candidate screening BUT NOT for historical validation (Tier 2 — "would
+    the engine have caught X in 2015?"); that test requires historical
+    membership data. Do not use this list in validation.
 
-    Cache: use_cache=True ve cache dosyası varsa ondan okur (deterministik,
-    tekrarlanabilir evren — aynı çalışmada aynı liste). Yoksa Wikipedia'dan
-    çeker ve cache'e yazar. Listeyi yenilemek için cache dosyasını sil.
+    Cache: if use_cache=True and the cache file exists, read from it
+    (deterministic, reproducible universe — same list within the same run).
+    Otherwise scrape from Wikipedia and write the cache. Delete the cache
+    file to refresh the list.
 
-    Ticker temizliği: Wikipedia 'BRK.B', 'BF.B' gibi nokta formatı verir;
-    yfinance tire ister ('BRK-B', 'BF-B'). Nokta -> tire çevrilir.
+    Ticker cleanup: Wikipedia returns dot format like 'BRK.B', 'BF.B';
+    yfinance expects hyphens ('BRK-B', 'BF-B'). Dots are converted to
+    hyphens.
     """
     if use_cache and CACHE_PATH.exists():
-        logger.info("S&P 500 cache'ten okunuyor: %s", CACHE_PATH)
+        logger.info("Reading S&P 500 from cache: %s", CACHE_PATH)
         df = pd.read_csv(CACHE_PATH)
         return df["ticker"].tolist()
 
-    logger.info("S&P 500 Wikipedia'dan çekiliyor: %s", WIKIPEDIA_SP500_URL)
-    # Wikipedia pd.read_html'in default User-Agent'ına 403 dönüyor; gerçek
-    # tarayıcı UA göndermek için requests üzerinden indirip metni geçiriyoruz.
+    logger.info("Fetching S&P 500 from Wikipedia: %s", WIKIPEDIA_SP500_URL)
+    # Wikipedia returns 403 to pd.read_html's default User-Agent; we
+    # download via requests with a real browser UA and pass the text in.
     headers = {"User-Agent": "Mozilla/5.0 (research/educational use)"}
     response = requests.get(WIKIPEDIA_SP500_URL, headers=headers, timeout=15)
     response.raise_for_status()
@@ -49,9 +52,9 @@ def get_sp500_tickers(use_cache: bool = True) -> list[str]:
     df = tables[0]
     if "Symbol" not in df.columns:
         raise ValueError(
-            f"Wikipedia S&P 500 tablo şeması değişmiş: 'Symbol' sütunu yok. "
-            f"Mevcut sütunlar: {list(df.columns)}. Sessiz yanlış liste "
-            f"döndürmemek için durduruldu — parser'ı güncelle."
+            f"Wikipedia S&P 500 table schema has changed: 'Symbol' column "
+            f"is missing. Current columns: {list(df.columns)}. Stopped to "
+            f"avoid silently returning the wrong list — update the parser."
         )
 
     tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
@@ -60,7 +63,7 @@ def get_sp500_tickers(use_cache: bool = True) -> list[str]:
     pd.DataFrame({"ticker": tickers}).to_csv(CACHE_PATH, index=False)
 
     logger.warning(
-        "SURVIVORSHIP BIAS: get_sp500_tickers BUGÜNKÜ üyeleri döndürür; "
-        "tarihsel validation için kullanma."
+        "SURVIVORSHIP BIAS: get_sp500_tickers returns TODAY's members; "
+        "do not use for historical validation."
     )
     return tickers

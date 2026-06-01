@@ -1,8 +1,9 @@
-"""Aşama 2: zaman serisi özetleme (clustering feature'larına indirgeme).
+"""Stage 2: time-series summarization (reducing series to clustering features).
 
-calculator.py Aşama 1'in çıktısı (her metrik için zaman serisi) buradan
-geçer ve clustering'e girecek özet skalerlere indirilir. Ayrı sorumluluk:
-calculator.py finansal mantık, features.py istatistiksel özetleme.
+The output of calculator.py (Stage 1: a time series per metric) flows
+through here and is reduced to summary scalars for clustering. Separate
+responsibilities: calculator.py = financial logic, features.py = statistical
+summarization.
 """
 
 import numpy as np
@@ -25,23 +26,25 @@ METRICS = {
 
 
 def seri_ozetle(seri: list[float]) -> dict:
-    """Bir metriğin zaman serisini clustering için özet feature'lara indirir.
+    """Reduce a metric's time series to summary features for clustering.
 
-    Clustering feature'ları (ham değer; z-score normalizasyonu M4'te):
-      - level_last: son dolu değer (mevcut seviye)
-      - trend:      zamana karşı OLS eğimi (yön + hız)
-      - stability:  dolu değerlerin population std'si (oynaklık)
+    Clustering features (raw values; z-score normalization happens in M4):
+      - level_last: last non-NaN value (current level)
+      - trend:      OLS slope vs. time (direction + speed)
+      - stability:  population std of the non-NaN values (volatility)
 
-    META alanları (denetim/filtre için; clustering mesafe hesabına GİRMEZ —
-    R² kaliteyi değil ölçüm uyumunu gösterir, mesafeye sokmak kirletir):
-      - trend_r2:   linregress R² (trend ne kadar doğrusal)
-      - n_valid:    kaç dolu nokta vardı
+    META fields (for audit/filter; do NOT enter clustering distance —
+    R² indicates measurement fit rather than quality, and mixing it in
+    pollutes distance):
+      - trend_r2:   linregress R² (how linear the trend is)
+      - n_valid:    how many non-NaN points there were
 
-    NaN'ler atılır AMA orijinal dönem pozisyonu (x ekseni) korunur — zaman
-    aralığı çarpılmasın diye. Örn [nan, 0.43, 0.44, 0.46, 0.47] için
-    x=[1,2,3,4], y=[0.43,0.44,0.46,0.47].
+    NaNs are dropped BUT the original period position (x-axis) is preserved
+    so the time gap is not collapsed. Example: [nan, 0.43, 0.44, 0.46, 0.47]
+    yields x=[1,2,3,4], y=[0.43,0.44,0.46,0.47].
 
-    Eşikler: level_last >=1, stability >=2, trend >=3 dolu nokta; aksi NaN.
+    Thresholds: level_last >=1, stability >=2, trend >=3 non-NaN points;
+    otherwise NaN.
     """
     arr = np.asarray(seri, dtype="float64")
     valid_mask = ~np.isnan(arr)
@@ -70,12 +73,13 @@ def seri_ozetle(seri: list[float]) -> dict:
 
 
 def extract_features(cf) -> dict:
-    """Bir şirketin CompanyFinancials'ından clustering feature'ları çıkarır.
+    """Extract clustering features from a company's CompanyFinancials.
 
-    Her metriği hesaplar, seri_ozetle ile özetler. Sonuç İKİ BÖLMELİ:
-    - features: clustering'e GİREN (level_last, trend, stability) — düz isimli
-    - meta: clustering'e GİRMEYEN (trend_r2, n_valid) — denetim/filtre,
-      data leakage'ı fiziksel önlemek için ayrı bölmede
+    Computes every metric and summarizes it via seri_ozetle. The result has
+    TWO compartments:
+    - features: ENTERS clustering (level_last, trend, stability) — flat names
+    - meta: does NOT enter clustering (trend_r2, n_valid) — audit/filter, in
+      a separate compartment to physically prevent data leakage
     """
     features = {}
     meta = {}

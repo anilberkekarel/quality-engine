@@ -1,9 +1,9 @@
-"""Evren -> feature/meta matrisleri orkestrasyonu.
+"""Universe -> feature/meta matrix orchestration.
 
-Tek şirket akışı (provider -> CompanyFinancials -> extract_features) zaten
-parça parça var; bu modül onu evren üzerinde döndürür ve İKİ ayrı matris
-çıkarır: clustering'e giren feature_df ve denetim için meta_df. Ayrım
-fizikseldir (leakage önlemi).
+The single-company flow (provider -> CompanyFinancials -> extract_features)
+exists in parts; this module runs it across the universe and produces TWO
+separate matrices: feature_df for clustering and meta_df for audit. The
+separation is physical (leakage safeguard).
 """
 
 import logging
@@ -24,20 +24,21 @@ def build_feature_matrix(
     delay: float = 0.0,
     save_dir: str | None = None,
 ) -> tuple:
-    """Verilen ticker listesi için feature ve meta matrislerini kurar.
+    """Build feature and meta matrices for the given ticker list.
 
-    İki DataFrame döndürür (data leakage ayrımı korunur):
-    - feature_df: satır=ticker, sütun=21 clustering feature (clustering buraya girer)
-    - meta_df: satır=ticker, sütun=14 meta (trend_r2, n_valid — denetim/filtre)
+    Returns two DataFrames (data leakage separation preserved):
+    - feature_df: rows=ticker, columns=21 clustering features (clustering uses this)
+    - meta_df: rows=ticker, columns=14 meta (trend_r2, n_valid — audit/filter)
 
-    Resilient: bir şirket çökerse (yfinance hatası, boş veri) loglanır,
-    atlanır, döngü devam eder (tek şirket tüm matrisi çökertmez).
+    Resilient: if a company fails (yfinance error, empty data) it is logged,
+    skipped, and the loop continues (one company does not break the whole
+    matrix).
 
-    delay: her çağrı arası bekleme (saniye). Küçük testte 0, tüm evrende
-    (~500 şirket) rate-limit için 0.2 gibi bir değer önerilir.
+    delay: wait between calls (seconds). 0 for small tests; ~0.2 is
+    recommended for the full universe (~500 companies) to avoid rate limits.
 
-    save_dir verilirse feature_matrix.csv ve meta_matrix.csv olarak
-    kaydedilir (index=ticker).
+    If save_dir is provided, the matrices are saved as feature_matrix.csv
+    and meta_matrix.csv (index=ticker).
     """
     features_rows = []
     meta_rows = []
@@ -47,7 +48,7 @@ def build_feature_matrix(
         try:
             cf = provider.get_financials(ticker)
             if not cf.period_end_dates:
-                logger.warning(f"{ticker}: boş veri, atlanıyor")
+                logger.warning(f"{ticker}: empty data, skipping")
                 basarisiz.append(ticker)
                 continue
             result = extract_features(cf)
@@ -56,7 +57,7 @@ def build_feature_matrix(
             features_rows.append(result["features"])
             meta_rows.append(result["meta"])
         except Exception as e:
-            logger.warning(f"{ticker}: hata ({type(e).__name__}: {e}), atlanıyor")
+            logger.warning(f"{ticker}: error ({type(e).__name__}: {e}), skipping")
             basarisiz.append(ticker)
         if delay > 0:
             time.sleep(delay)
@@ -65,14 +66,14 @@ def build_feature_matrix(
     meta_df = pd.DataFrame(meta_rows).set_index("ticker")
 
     logger.info(
-        f"Matris kuruldu: {len(features_rows)} başarılı, "
-        f"{len(basarisiz)} başarısız. Başarısız: {basarisiz}"
+        f"Matrix built: {len(features_rows)} succeeded, "
+        f"{len(basarisiz)} failed. Failed: {basarisiz}"
     )
 
     if save_dir is not None:
         os.makedirs(save_dir, exist_ok=True)
         feature_df.to_csv(os.path.join(save_dir, "feature_matrix.csv"))
         meta_df.to_csv(os.path.join(save_dir, "meta_matrix.csv"))
-        logger.info(f"Matrisler kaydedildi: {save_dir}")
+        logger.info(f"Matrices saved to: {save_dir}")
 
     return feature_df, meta_df
