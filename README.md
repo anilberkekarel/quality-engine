@@ -46,13 +46,22 @@ The full reasoning — philosophy, the clustering-to-spectrum pivot, results, li
 
 ## Quick start
 
+**Linux / macOS:**
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install yfinance pandas numpy scipy scikit-learn pytest
 
-# run the engine — fetches data on first run, caches it, then scores
-PYTHONPATH=src python3 run.py --companies 200 --delay 0.3
+python3 run.py --companies 200 --delay 0.3
+```
+
+**Windows (PowerShell):**
+```powershell
+python -m venv venv
+venv\Scripts\Activate.ps1
+pip install yfinance pandas numpy scipy scikit-learn pytest
+
+python run.py --companies 200 --delay 0.3
 ```
 
 On first run the engine fetches fundamentals (this takes a few minutes and is cached afterward), then ranks the companies by QScore. Options:
@@ -63,7 +72,7 @@ On first run the engine fetches fundamentals (this takes a few minutes and is ca
 
 Run `python3 run.py --help` for details.
 
-Tests: `PYTHONPATH=src python3 -m pytest tests/ -v` (22 risk-based tests).
+Tests: run `python -m pytest tests/ -v` (or `python3` on Linux/macOS) — 22 risk-based tests.
 
 ## Example output
 
