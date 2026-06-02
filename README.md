@@ -50,7 +50,7 @@ The full reasoning — philosophy, the clustering-to-spectrum pivot, results, li
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install yfinance pandas numpy scipy scikit-learn pytest
+pip install yfinance pandas numpy scipy scikit-learn pytest lxml requests
 
 python3 run.py --companies 200 --delay 0.3
 ```
@@ -59,7 +59,7 @@ python3 run.py --companies 200 --delay 0.3
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
-pip install yfinance pandas numpy scipy scikit-learn pytest
+pip install yfinance pandas numpy scipy scikit-learn pytest lxml requests
 
 python run.py --companies 200 --delay 0.3
 ```
